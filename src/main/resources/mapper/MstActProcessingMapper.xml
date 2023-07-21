@@ -1,0 +1,595 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.iwhalecloud.web.dao.mapper.MstActProcessingMapper">
+
+    <resultMap id="BaseResultMap" type="com.iwhalecloud.web.dao.entity.MstActProcessing">
+        <!--
+          WARNING - @mbg.generated
+        -->
+        <result column="id" jdbcType="INTEGER" property="id"/>
+        <result column="act_id" jdbcType="VARCHAR" property="actId"/>
+        <result column="user_id" jdbcType="BIGINT" property="userId"/>
+        <result column="crt_date" jdbcType="TIMESTAMP" property="crtDate"/>
+        <result column="state" jdbcType="SMALLINT" property="state"/>
+        <result column="handle_times" jdbcType="SMALLINT" property="handleTimes"/>
+        <result column="upd_date" jdbcType="TIMESTAMP" property="updDate"/>
+        <result column="error_msg" jdbcType="VARCHAR" property="errorMsg"/>
+    </resultMap>
+
+    <select id="getPendingProcessingInfo" resultMap="BaseResultMap">
+        select *
+        from mst_act_pending_processing a
+        where a.state = 10
+        order by a.crt_date asc
+    </select>
+
+    <update id="updateState" parameterType="com.iwhalecloud.web.dao.entity.MstActProcessing">
+        update mst_act_pending_processing a
+        set state     = #{state},
+            upd_date  = now()::timestamp(0)
+        <if test="errorMsg != null and errorMsg != ''">
+            ,error_msg = #{errorMsg}
+        </if>
+        where a.id = #{id}
+          and state = 10
+    </update>
+
+    <!--查询活动-->
+    <select id="selectActInfo" parameterType="map" resultType="map">
+        select *
+        from mst_dim_scene_config a
+        where a.state = '00A'
+          and a.exe_scene_id = #{actId}
+    </select>
+
+    <!--查询接单人信息-->
+    <select id="selectTaskUserInfo" parameterType="map" resultType="map">
+        select a.user_id, a.user_name, x.pos_id, x.pos_name, y.role_id, y.role_name
+        from wid_hx_user a
+         left join (select string_agg(f.pos_id, ',' order by f.pos_id) pos_id,
+                           string_agg(d.pos_name, ',' order by d.pos_name) pos_name,
+                           f.user_id
+                    from sys_pos_info d, sys_user_pos f
+                    where d.pos_id = f.pos_id
+                      and d.state = '00A'
+                      and f.state = '00A'
+                    group by user_id) x
+                   on a.user_id = cast(x.user_id as numeric)
+         join (select string_agg(f.role_id, ',' order by f.role_id) role_id,
+                      string_agg(d.role_name, ',' order by f.role_id) role_name,
+                      string_agg(d.role_type, ',' order by f.role_id) role_type,
+                      d.area_type,
+                      f.user_id
+               from sys_role_info d, sys_user_role f
+               where d.role_id = f.role_id
+                 and f.state = '00A'
+               group by d.area_type, f.user_id) y
+              on a.user_id = cast(y.user_id as numeric)
+        where a.state = '00A'
+          and a.user_id = #{act_head}
+    </select>
+
+    <!--查询活动关联的小区-->
+    <select id="selectSubdisInfo" parameterType="map" resultType="map">
+        select *
+        from mst_scene_act_subdis_rel a
+        where a.state = '00A'
+          and a.scene_id = #{actId}
+    </select>
+
+    <!--查询活动下的场景-->
+    <select id="selectGroupInfo" parameterType="map" resultType="map">
+        select a.* from mst_scene_act_user_group a
+        join mst_act_scene_tactics_rel b on a.id = b.scene_id
+        where a.state = '00A' and b.state = '00A'
+        <if test="actId != null and actId != ''">
+            and a.exe_scene_id = #{actId}
+        </if>
+        <if test="userType != null and userType != ''">
+            and a.user_type = #{userType}
+        </if>
+    </select>
+
+    <!--查询场景下的策略-->
+    <select id="selectTacticsInfo" parameterType="map" resultType="map">
+        select a.*,b.sort from mst_scene_act_tactics a
+        join mst_scene_act_user_group_tactics_rel b on a.id = b.tactics_id
+        where a.state = '00A'
+        and b.state = '00A'
+        <if test="groupId != null and groupId != ''">
+            and b.group_id = #{groupId}
+        </if>
+        <if test="userType != null and userType != ''">
+            and a.user_type = #{userType}
+        </if>
+        order by b.sort asc
+    </select>
+
+    <!--查询策略的条件-->
+    <select id="selectTacticsCondition" parameterType="map" resultType="map">
+        select b.reserv_n,a.label_name,a.label_value,b.lab_kind,c.range_value,c.filter_value,c.tactics_id,c.condition
+        from mst_user_label a
+        join dim_label_master_xmyy b on a.label_value = b.lab_code
+        join mst_scene_act_tactics_info c on a.label_value = c.tag_value
+        where a.label_use = '1200'
+          and c.state = '00A'
+          and c.tactics_id = #{tactics_id}
+    </select>
+
+    <!--查询场景用户补充标签-->
+    <select id="selectSceneLabel" parameterType="map" resultType="map">
+        select a.tag_name, a.tag_value
+        from mst_activity_label_rel a
+        where a.state = '00A'
+        <if test="groupId != null and groupId != ''">
+            and a.relation_id = #{groupId}
+        </if>
+        order by a.order_id asc
+    </select>
+
+    <!--获取存量用户明细-->
+    <select id="selectUserList" parameterType="map" resultType="java.util.Map">
+        select #{tactics_name} as tactics_name, #{tactics_desc} as tactics_desc,
+               #{group_id} as group_id, #{group_name} as group_name,
+               a.*
+          from mst_user_list_info a
+        where a.subdis_id in
+        <foreach collection="list" open="(" close=")" item="item" index="index" separator=",">
+            #{item.subdis_id}
+        </foreach>
+        <if test="tactics_tag_sql != null and tactics_tag_sql != ''">
+            ${tactics_tag_sql}
+        </if>
+    </select>
+
+    <!--获取新发展用户明细-->
+    <select id="selecYwUserList" parameterType="map" resultType="java.util.Map">
+        select #{tactics_name} as tactics_name, #{tactics_desc} as tactics_desc,
+                #{group_id} as group_id, #{group_name} as group_name,
+            s.city_id,
+            s.city_name,
+            s.area_id,
+            s.area_name,
+            s.grid_id,
+            s.grid_code,
+            s.grid_name,
+            s.town_id,
+            s.town_code,
+            s.town_name,
+            s.chip_id,
+            s.chip_code,
+            s.chip_name,
+            n.subdis_id,
+            n.subdis_name,
+            o.addr5_id,
+            o.addr5_name,
+            o.addr6_id,
+            o.addr6_name,
+            o.addr7_id,
+            o.addr7_name,
+            o.addr8_id,
+            o.addr8_name,
+            o.addr9_id,
+            o.addr9_name,
+            concat_ws('',o.addr5_name,'-',o.addr6_name,'-',o.addr7_name,'-',o.addr8_name,'-',o.addr9_name) as install_address,
+
+        FROM v_ms_area_new_chip s
+        join (SELECT a.subdis_id,
+                a.subdis_name,
+                b.chip_id
+                FROM mst_subdis_collect_info a
+                join mst_switch_subdis_chip_rel b on a.subdis_id = b.subdis_id
+                WHERE a.state = '00A' and b.state = '00A' AND a.if_sp = '1'
+                and a.subdis_id in
+                <foreach collection="list" open="(" close=")" item="item" index="index" separator=",">
+                    #{item.subdis_id}
+                </foreach>
+            ) n ON s.chip_id = n.chip_id
+        join mst_subdis_addr5_rel p on p.subdis_id = n.subdis_id
+        join yxsp_room_collect o on p.addr5_id = o.addr5_id
+        where 1=1
+        <if test="tactics_tag_sql != null and tactics_tag_sql != ''">
+            ${tactics_tag_sql}
+        </if>
+    </select>
+
+    <!--获取存量导入的用户明细数据-->
+    <select id="getImportUser" parameterType="map" resultType="map">
+        select acc_nbr,
+                user_code,
+                mk_strategy_1 as tactics_name,
+                mk_strategy_2 as tactics_name1,
+                mk_strategy_3 as tactics_name2,
+                mk_script_1 as tactics_desc,
+                mk_script_2 as tactics_desc1,
+                mk_script_3 as tactics_desc2,
+                mk_label_1,
+                mk_label_2,
+                mk_label_3,
+                mk_label_4,
+                mk_label_5,
+                mk_label_6,
+                mk_label_7,
+                mk_label_8,
+                mk_label_9,
+                mk_label_10
+        from mst_act_group_import a
+        join mst_act_scene_file_rel b on a.batch_no = b.batch_no
+        join mst_user_list_info c on a.acc_nbr = c.acc_nbr
+        where b.state = '00A'
+          and a.failue_reason is null
+          and b.scene_id = #{groupId}
+          and c.subdis_id in
+        <foreach collection="list" open="(" close=")" item="item" index="index" separator=",">
+            #{item.subdis_id}
+        </foreach>
+    </select>
+
+    <!--重新执行活动派单时删除上次跑出的活动明细-->
+    <delete id="deleteGroupUserDeal" parameterType="map">
+        delete
+        from mst_act_group_user_deal
+        where exe_scene_id = #{actId}
+    </delete>
+
+    <!--插入活动结果明细-->
+    <insert id="insertGroupUserDeal" parameterType="map">
+        insert into mst_act_group_user_deal (flow_id,
+                                             dispatch_date,
+                                             task_worker_id,
+                                             task_worker_name,
+                                             task_worker_pos_id,
+                                             task_worker_pos_name,
+                                             exe_scene_id,
+                                             group_id,
+                                             city_id,
+                                             city_name,
+                                             area_id,
+                                             area_name,
+                                             grid_id,
+                                             grid_code,
+                                             grid_name,
+                                             town_id,
+                                             town_code,
+                                             town_name,
+                                             chip_id,
+                                             chip_code,
+                                             chip_name,
+                                             subdis_id,
+                                             subdis_name,
+                                             addr5_id,
+                                             addr5_name,
+                                             addr6_id,
+                                             addr6_name,
+                                             addr7_id,
+                                             addr7_name,
+                                             addr8_id,
+                                             addr8_name,
+                                             addr9_id,
+                                             addr9_name,
+                                             install_address,
+                                             serv_id,
+                                             acc_nbr,
+                                             cust_id,
+                                             cust_name,
+                                             main_offer_comp_name,
+                                             number_type,
+                                             mk_strategy_1,
+                                             mk_script_1,
+                                             mk_strategy_2,
+                                             mk_script_2,
+                                             mk_strategy_3,
+                                             mk_script_3,
+                                             mk_strategy_4,
+                                             mk_script_4,
+                                             mk_strategy_5,
+                                             mk_script_5,
+                                             mk_label_1,
+                                             mk_label_2,
+                                             mk_label_3,
+                                             mk_label_4,
+                                             mk_label_5,
+                                             mk_label_6,
+                                             mk_label_7,
+                                             mk_label_8,
+                                             mk_label_9,
+                                             mk_label_10)
+        select nextval('mst_work_flow_pool_seq'),
+                now()::timestamp(0) dispatch_date,
+                #{task_worker_id},
+                #{task_worker_name},
+                #{task_worker_pos_id},
+                #{task_worker_pos_name},
+                #{actId},
+               a.* from (
+        <foreach collection="list" open="(" close=")" item="item" index="index" separator="union all">
+            select
+                #{item.group_id},
+                #{item.group_name},
+                #{item.city_id},
+                #{item.city_name},
+                #{item.area_id},
+                #{item.area_name},
+                #{item.grid_id},
+                #{item.grid_code},
+                #{item.grid_name},
+                #{item.town_id},
+                #{item.town_code},
+                #{item.town_name},
+                #{item.chip_id},
+                #{item.chip_code},
+                #{item.chip_name},
+                #{item.subdis_id},
+                #{item.subdis_name},
+                #{item.addr5_id},
+                #{item.addr5_name},
+                #{item.addr6_id},
+                #{item.addr6_name},
+                #{item.addr7_id},
+                #{item.addr7_name},
+                #{item.addr8_id},
+                #{item.addr8_name},
+                #{item.addr9_id},
+                #{item.addr9_name},
+                #{item.install_address},
+                #{item.serv_id},
+                #{item.acc_nbr},
+                #{item.cust_id},
+                #{item.cust_name},
+                #{item.main_offer_comp_name},
+                #{item.number_type},
+                #{item.tactics_name},
+                #{item.tactics_desc},
+                #{item.tactics_name1},
+                #{item.tactics_desc1},
+                #{item.tactics_name2},
+                #{item.tactics_desc2},
+                #{item.tactics_name3},
+                #{item.tactics_desc3},
+                #{item.tactics_name4},
+                #{item.tactics_desc4},
+                #{item.mk_label_1},
+                #{item.mk_label_2},
+                #{item.mk_label_3},
+                #{item.mk_label_4},
+                #{item.mk_label_5},
+                #{item.mk_label_6},
+                #{item.mk_label_7},
+                #{item.mk_label_8},
+                #{item.mk_label_9},
+                #{item.mk_label_10}
+        </foreach>
+        ) a
+    </insert>
+
+    <!--保存工单池-->
+    <insert id="insertFlowPool" parameterType="map">
+        insert into mst_work_flow_pool (
+            flow_id,
+            flow_state,
+            state_date,
+            flow_crt_date,
+            expire_date,
+            org_id,
+            subdistrict_id,
+            subdistrict_name,
+            cust_id,
+            cust_name,
+            address_id9,
+            address_name9,
+            exe_scene_id,
+            serv_id,
+            acc_nbr,
+            product_type,
+            product_name,
+            deal_state,
+            flow_type,
+            flow_status,
+            order_data_id
+        )
+        select
+            a.flow_id,
+            1 AS flow_state,
+            a.dispatch_date,
+            now()::timestamp(0) AS flow_crt_date,
+            #{exp_date}::timestamp(0) AS expire_date,
+            -1 as org_id,
+            a.subdis_id,
+            a.subdis_name,
+            a.cust_id,
+            a.cust_name,
+            a.addr9_id,
+            a.addr9_name,
+            a.exe_scene_id,
+            a.serv_id,
+            a.acc_nbr,
+            a.acc_nbr,
+            a.main_offer_comp_name,
+            '1' AS deal_state,
+            '0' AS flow_type,
+            '1' AS flow_status,
+            NULL AS order_data_id
+        from mst_act_group_user_deal a
+        where a.exe_scene_id = #{actId}
+    </insert>
+
+    <!--保存工单实例-->
+    <insert id="insertFlowInst" parameterType="map">
+        insert into mst_work_flow_inst
+        (flow_id,
+         flow_state,
+         state_date,
+         dispatch_date,
+         expire_date,
+         task_worker_id,
+         task_worker_name,
+         task_worker_pos_id,
+         task_worker_pos_name,
+         city_id,
+         city_name,
+         area_id,
+         area_name,
+         grid_id,
+         grid_code,
+         grid_name,
+         town_id,
+         town_code,
+         town_name,
+         chip_id,
+         chip_code,
+         chip_name,
+         subdistrict_id,
+         subdistrict_name,
+         household_id,
+         cust_id,
+         cust_name,
+         address_id9,
+         address_name9,
+         exe_scene_id,
+         serv_id,
+         acc_nbr,
+         product_type,
+         product_name,
+         day_id,
+         flow_type,
+         flow_status,
+         order_data_id,
+         addr5_id,
+         addr5_name,
+         addr6_id,
+         addr6_name,
+         addr7_id,
+         addr7_name,
+         addr8_id,
+         addr8_name,
+         install_address
+         )
+         select
+             flow_id,
+             '1'                    as flow_state,
+             now()::timestamp(0)    as state_date,
+             dispatch_date,
+             #{exp_date}::timestamp(0),
+             task_worker_id,
+             task_worker_name,
+             task_worker_pos_id,
+             task_worker_pos_name,
+             city_id,
+             city_name,
+             area_id,
+             area_name,
+             grid_id,
+             grid_code,
+             grid_name,
+             town_id,
+             town_code,
+             town_name,
+             chip_id,
+             chip_code,
+             chip_name,
+             subdis_id,
+             subdis_name,
+             addr9_id,
+             cust_id,
+             cust_name,
+             addr9_id,
+             addr9_name,
+             exe_scene_id,
+             serv_id,
+             acc_nbr,
+             product_type,
+             product_name,
+             to_char(now()::date,'yyyyMMdd') as day_id,
+             '0' as flow_type,
+             '1' as flow_status,
+             null as order_data_id,
+             addr5_id,
+             addr5_name,
+             addr6_id,
+             addr6_name,
+             addr7_id,
+             addr7_name,
+             addr8_id,
+             addr8_name,
+             install_address
+        from mst_act_group_user_deal a
+        where a.exe_scene_id = #{actId}
+    </insert>
+
+    <!--保存项目运营工单策略话术表-->
+    <insert id="insertTaskStrategy" parameterType="map">
+        insert into mst_work_task_strategy(
+            flow_id,
+            group_name,
+            mk_strategy_1,
+            mk_script_1,
+            mk_strategy_2,
+            mk_script_2,
+            mk_strategy_3,
+            mk_script_3,
+            mk_label_1,
+            mk_label_2,
+            mk_label_3,
+            mk_label_4,
+            mk_label_5,
+            mk_label_6,
+            mk_label_7,
+            mk_label_8,
+            mk_label_9,
+            mk_label_10
+        )select flow_id,
+                group_name,
+                mk_strategy_1,
+                mk_script_1,
+                mk_strategy_2,
+                mk_script_2,
+                mk_strategy_3,
+                mk_script_3,
+                mk_label_1,
+                mk_label_2,
+                mk_label_3,
+                mk_label_4,
+                mk_label_5,
+                mk_label_6,
+                mk_label_7,
+                mk_label_8,
+                mk_label_9,
+                mk_label_10
+        from mst_act_group_user_deal a
+        where a.exe_scene_id = #{actId}
+    </insert>
+
+    <!--保存添加工单轨迹表-->
+    <insert id="insertTaskTrace" parameterType="map">
+        insert into mst_work_task_trace (
+            flow_id,
+            task_id,
+            oper_type,
+            oper_date,
+            task_worker_id,
+            task_worker_name,
+            task_worker_pos_id,
+            task_worker_pos_name,
+            dispatch_date,
+            deal_content,
+            trans_id,
+            seq_no,
+            is_revoked)
+        SELECT a.flow_id,
+               nextval('seq_task_id'),
+               0,
+               a.dispatch_date,
+               a.task_worker_id,
+               a.task_worker_name,
+               a.task_worker_pos_id,
+               a.task_worker_pos_name,
+               a.dispatch_date,
+               NULL,
+               NULL,
+               NULL,
+               '0'
+        from mst_act_group_user_deal a
+        where a.exe_scene_id = #{actId}
+    </insert>
+
+</mapper>

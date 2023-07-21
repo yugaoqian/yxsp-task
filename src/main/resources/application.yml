@@ -1,0 +1,30 @@
+spring:
+  jmx:
+    default-domain: /yxsp-task
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      max-file-size : 10MB
+      max-request-size : 100MB
+mybatis:
+  config-location: classpath:mybatis-config.xml
+  mapper-locations: classpath:mapper/**/*.xml
+#  configuration:
+#    map-underscore-to-camel-case: true
+#mapper
+mapper:
+  mappers: com.iwhalecloud.web.dao.mapper.BaseMapper
+  not-empty: false
+  identity: postgresql
+
+logging:
+  level:
+    com.iwhalecloud.web.dao.mapper: debug
+
+myProps:
+  corePoolSize: 10
+  maxPoolSize: 100
+  queueCapacity: 10
+  threadNamePrefix: "yxsp-task-"
+  keepAliveSeconds: 30

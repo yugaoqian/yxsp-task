@@ -1,0 +1,31 @@
+server:
+  servlet:
+    context-path: /yxsp-task
+  port: 8889
+spring:
+  datasource:
+      url: jdbc:postgresql://10.10.179.7:5432/yxsp
+      username: yxsp
+      driver-class-name: org.postgresql.Driver
+      password: ztesoft123
+
+  #    druid:
+  #      privateKey: MIIBVgIBADANBgkqhkiG9w0BAQEFAASCAUAwggE8AgEAAkEA0Pn4Dy2m5ixKdClQ7Vx1tQjFej7nqaty60O24EUOWpbj3ja5t1U5OeebJ9DLzMllB3hCIelKIgkeeC4ozUz3ewIDAQABAkEAve4y0ji/s/sVQDY84z5hjMQIF28MxlyY+dJ1Z6fbv+A3SJv91bFx2VfgUlwY6yr/F1Rp3nl64pt2LsTiFId5oQIhAO/+/roUfttwX7wnNLp5pR6TUwqzrzVZNyMvsguqszOlAiEA3ulvBLNK9jImv6cKJgbPt52usUoTZO5ofZX4qcprFJ8CIQC1BBjvEzxnmQesa8naiJvhRu+Ql9ykGWl8EaJyKEtHvQIgYpxhwHKQdtk4yw/aLXhV66SV41ghvES7dNMjbfld5YECIQDZTLs0CpHrcCHD9MWTUPo9D0NaUvZO2FUjNEIUw8cUJQ==
+  #      publicKey: MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAND5+A8tpuYsSnQpUO1cdbUIxXo+56mrcutDtuBFDlqW4942ubdVOTnnmyfQy8zJZQd4QiHpSiIJHnguKM1M93sCAwEAAQ==
+
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    database: 0
+    jedis:
+      pool:
+        max-active: 100
+        max-wait: 10
+        max-idle: 10
+        min-idle: 10
+    timeout: 30000
+
+logging:
+  config: classpath:logback-spring.xml
+  level:
+    main.blog.mapper: trace
